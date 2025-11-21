@@ -7,7 +7,7 @@ from Graph_Workflow.graph import Graphbuilder
 # load_dotenv()
 # api_key = os.getenv("GROQ_API_KEY")
 os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]
-os.environ["LANGCHAIN_TRACING_V2"] = True
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT_NAME"] = "Q&A Chatbot"
 api_key = st.secrets["GROQ_API_KEY"]
 if not api_key:
