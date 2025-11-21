@@ -1,4 +1,3 @@
-from dotenv import load_dotenv
 import os 
 from LLM.groqllm import GroqLLM
 import streamlit as st
