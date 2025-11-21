@@ -8,9 +8,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_core.tools import tool
 # from langchain.tools import create_retriever_tool
-# from langchain.tools.retriever import create_retriever_tool
+from langchain.tools.retriever import create_retriever_tool
 import streamlit as st
-from langchain_core.tools.retriever import create_retriever_tool
+# from langchain_core.tools.retriever import create_retriever_tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
 import os 
