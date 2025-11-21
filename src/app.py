@@ -5,10 +5,11 @@ import streamlit as st
 import uuid
 from Graph_Workflow.graph import Graphbuilder
 
-load_dotenv()
-api_key = os.getenv("GROQ_API_KEY")
+# load_dotenv()
+# api_key = os.getenv("GROQ_API_KEY")
+api_key = st.secrets["GROQ_API_KEY"]
 if not api_key:
-    st.error("❌ GROQ_API_KEY missing in .env")
+    st.error("❌ GROQ_API_KEY missing in st secrets")
     st.stop()
 
 st.set_page_config(page_title="Q&A Chatbot", page_icon="💬")
