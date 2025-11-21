@@ -8,8 +8,8 @@ from Graph_Workflow.graph import Graphbuilder
 # load_dotenv()
 # api_key = os.getenv("GROQ_API_KEY")
 os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]
-os.environ["LANGCHAIN_TRACING_V2"] = st.secrets["LANGCHAIN_TRACING_V2"]
-os.environ["LANGCHAIN_PROJECT_NAME"] = st.secrets["LANGCHAIN_PROJECT_NAME"]
+os.environ["LANGCHAIN_TRACING_V2"] = True
+os.environ["LANGCHAIN_PROJECT_NAME"] = "Q&A Chatbot"
 api_key = st.secrets["GROQ_API_KEY"]
 if not api_key:
     st.error("❌ GROQ_API_KEY missing in st secrets")
