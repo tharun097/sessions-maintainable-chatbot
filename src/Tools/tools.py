@@ -52,7 +52,7 @@ def nasa_tool():
 # ---------------- API TOOL ----------------
 def api_tool():
     loader = TextLoader(
-        file_path="C:\\Users\\HP\\Desktop\\Simple Q&A Chatbot\\Q&A chatbot\\assets\\knowledge_base1.txt",
+        file_path="assets/knowledge_base1.txt",
         encoding="utf8"
     )
     data = loader.load()
