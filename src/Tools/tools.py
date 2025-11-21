@@ -19,9 +19,6 @@ from huggingface_hub import login
 # load_dotenv()
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 os.environ["TAVILY_API_KEY"]=st.secrets["TAVILY_API_KEY"]
-api_key = st.secrets["GROQ_API_KEY"]
-api_key = st.secrets["GROQ_API_KEY"]
-api_key = st.secrets["GROQ_API_KEY"]
 login(token=st.secrets["HUGGINGFACEHUB_API_TOKEN"])
 # ---------------- NASA TOOL ----------------
 def nasa_tool():
