@@ -16,7 +16,6 @@ langchain-openai==0.3.32
 langchain-tavily==0.2.11
 langchain-text-splitters==0.3.11
 langgraph==0.6.7
-langgraph[cli]==0.4.2
 pydantic==2.11.7
 pydantic-settings==2.10.1
 pydantic_core==2.33.2
@@ -30,4 +29,5 @@ transformers==4.56.1
 typing_extensions==4.15.0
 uv==0.8.22
 watchdog==6.0.0
+
 
