@@ -79,7 +79,7 @@ def api_tool():
 # ---------------- SATELLITE TOOL ----------------
 def satellite_data_tool():
     loader = CSVLoader(
-        file_path="C:\\Users\\HP\\Desktop\\Simple Q&A Chatbot\\Q&A chatbot\\assets\\knowledge_base3.csv",
+        file_path="assets/knowledge_base3.csv",
         encoding="utf8"
     )
     data = loader.load()
@@ -106,7 +106,7 @@ def satellite_data_tool():
 # ---------------- SENSOR TOOL ----------------
 def sensors_data_tool():
     loader = CSVLoader(
-        file_path="C:\\Users\\HP\\Desktop\\Simple Q&A Chatbot\\Q&A chatbot\\assets\\sensor_raw_data.csv",
+        file_path="assets/sensor_raw_data.csv",
         encoding="utf8"
     )
     data = loader.load()
@@ -138,11 +138,3 @@ def create_tool_node(tools):
     """Creates a ToolNode for the given tool."""
     return ToolNode(tools=tools)
     
-# from langchain_groq import ChatGroq
-# from dotenv import load_dotenv
-# import os
-# load_dotenv()
-# api_key=os.environ["GROQ_API_KEY"]=os.getenv("GROQ_API_KEY")
-# model = ChatGroq(model="openai/gpt-oss-20b")
-# model = model.bind_tools([nasa_tool, api_tool, satellite_data_tool,sensors_data_tool])
-# print(model.invoke("Could you extract insights S-311 sensor?"))
