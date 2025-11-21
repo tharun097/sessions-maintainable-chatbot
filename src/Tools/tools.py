@@ -11,12 +11,15 @@ from langchain.tools.retriever import create_retriever_tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
 import os 
-from dotenv import load_dotenv 
-load_dotenv()
-os.environ["HUGGINGFACEHUB_API_TOKEN"] = os.getenv("HUGGINGFACEHUB_API_TOKEN")
-os.environ["TAVILY_API_KEY"]=os.getenv("TAVILY_API_KEY")
 from huggingface_hub import login
-login(token=os.getenv("HUGGINGFACEHUB_API_TOKEN"))
+from dotenv import load_dotenv 
+# load_dotenv()
+os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
+os.environ["TAVILY_API_KEY"]=st.secrets["TAVILY_API_KEY"]
+api_key = st.secrets["GROQ_API_KEY"]
+api_key = st.secrets["GROQ_API_KEY"]
+api_key = st.secrets["GROQ_API_KEY"]
+login(token=st.secrets["HUGGINGFACEHUB_API_TOKEN"])
 # ---------------- NASA TOOL ----------------
 def nasa_tool():
     web_content_loader = WebBaseLoader(
