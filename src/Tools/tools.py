@@ -12,7 +12,7 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
 import os 
 from huggingface_hub import login
-from dotenv import load_dotenv 
+# from dotenv import load_dotenv 
 # load_dotenv()
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 os.environ["TAVILY_API_KEY"]=st.secrets["TAVILY_API_KEY"]
