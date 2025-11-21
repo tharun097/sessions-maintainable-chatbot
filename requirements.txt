@@ -4,7 +4,8 @@ langchain_community
 langchain_core
 langchain_groq
 langchain_classic
-beautifulsoup
+beautifulsoup4
+bs4
 pypdf
 sentence-transformers
 langchain_huggingface
@@ -12,3 +13,4 @@ huggingface_hub
 chroma
 streamlit
 tavily-python
+
