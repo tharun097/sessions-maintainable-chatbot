@@ -8,9 +8,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_core.tools import tool
 # from langchain.tools import create_retriever_tool
-from langchain.tools.retriever import create_retriever_tool
+# from langchain.tools.retriever import create_retriever_tool
 import streamlit as st
-# from langchain_core.tools.retriever import create_retriever_tool
+from langchain_core.tools import create_retriever_tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
 import os 
@@ -128,10 +128,15 @@ def sensors_data_tool():
         name="sensor_data_knowledge_base",
         description="Search and run information about sensor raw data"
     )
+
+tool_1 = nasa_tool()
+tool_2 = api_tool()
+tool_3 = satellite_data_tool()
+tool_4 = sensors_data_tool()
 def get_tools():
     """Returns a list of available tools."""
     # tavily_tool = TavilySearchResults(max_results=3)
-    tools = [nasa_tool(), api_tool(), satellite_data_tool(), sensors_data_tool()]
+    tools = [tool_1,tool_2,tool_3,tool_4]
     return tools
 
 def create_tool_node(tools):
