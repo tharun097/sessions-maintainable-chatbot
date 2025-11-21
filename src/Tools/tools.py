@@ -7,7 +7,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_core.tools import tool
-from langchain.tools import create_retriever_tool
+# from langchain.tools import create_retriever_tool
 from langchain.tools.retriever import create_retriever_tool
 from langchain_community.tools.retriever import create_retriever_tool
 from langchain_community.tools.tavily_search import TavilySearchResults
