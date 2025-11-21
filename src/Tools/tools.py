@@ -130,8 +130,8 @@ def sensors_data_tool():
     )
 def get_tools():
     """Returns a list of available tools."""
-    tavily_tool = TavilySearchResults(max_results=3)
-    tools = [nasa_tool(), api_tool(), satellite_data_tool(), sensors_data_tool(), tavily_tool]
+    # tavily_tool = TavilySearchResults(max_results=3)
+    tools = [nasa_tool(), api_tool(), satellite_data_tool(), sensors_data_tool()]
     return tools
 
 def create_tool_node(tools):
