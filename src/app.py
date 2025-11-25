@@ -1,25 +1,18 @@
-import os 
-from LLM.groqllm import GroqLLM
-import streamlit as st
+import os
 import uuid
+import streamlit as st
+from LLM.groqllm import GroqLLM
 from Graph_Workflow.graph import Graphbuilder
+from Tools.tools import process_uploaded_files, DOCUMENT_RETRIEVERS
 
-# load_dotenv()
-# api_key = os.getenv("GROQ_API_KEY")
+# --- Setup ---
 os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT_NAME"] = "Q&A Chatbot"
 api_key = st.secrets["GROQ_API_KEY"]
-if not api_key:
-    st.error("❌ GROQ_API_KEY missing in st secrets")
-    st.stop()
 
 st.set_page_config(page_title="Q&A Chatbot", page_icon="💬")
 
 
-# -------------------------------------------------------------------
-# Load Model + Graph Once
-# -------------------------------------------------------------------
+# --- Load graph once ---
 @st.cache_resource
 def load_graph():
     model = GroqLLM(llm="llama-3.1-8b-instant", api_key=api_key).load_llm()
@@ -28,9 +21,7 @@ def load_graph():
 graph = load_graph()
 
 
-# -------------------------------------------------------------------
-# Session Init
-# -------------------------------------------------------------------
+# --- Session setup ---
 if "sessions" not in st.session_state:
     st.session_state.sessions = {}
 
@@ -40,143 +31,71 @@ if "current_session" not in st.session_state:
 if "meta" not in st.session_state:
     st.session_state.meta = {}
 
-def new_chat():
-    new_id = str(uuid.uuid4())
-    st.session_state.sessions[new_id] = []
-    st.session_state.meta[new_id] = {"welcome_shown": False}
-    st.session_state.current_session = new_id
-
-
-# -------------------------------------------------------------------
-# Sidebar
-# -------------------------------------------------------------------
-st.sidebar.title("💬 Chat Sessions")
-st.sidebar.button("➕ New Chat", on_click=new_chat)
-
-for sid in list(st.session_state.sessions.keys()):
-    if st.sidebar.button(f"Chat {sid[:6]}..."):
-        st.session_state.current_session = sid
-
 session_id = st.session_state.current_session
+
+
+# --- Sidebar ---
+st.sidebar.title("📁 Document Upload")
+
+uploaded_files = st.sidebar.file_uploader(
+    "Upload documents", type=["pdf", "txt", "csv"], accept_multiple_files=True
+)
+
+if uploaded_files:
+    process_uploaded_files(uploaded_files, session_id)
+    st.sidebar.success("Documents processed successfully.")
+
+
+# --- Chat UI ---
+st.title("Q&A Chatbot with File Upload + Tools")
 
 if session_id not in st.session_state.sessions:
     st.session_state.sessions[session_id] = []
 
-if session_id not in st.session_state.meta:
-    st.session_state.meta[session_id] = {"welcome_shown": False}
-
-
-# -------------------------------------------------------------------
-# Page Title
-# -------------------------------------------------------------------
-st.title("Q&A Chatbot with Memory & Smart Tool Handling")
-
-
-# -------------------------------------------------------------------
-# Dynamic Welcome Message
-# -------------------------------------------------------------------
-if not st.session_state.meta[session_id]["welcome_shown"]:
-    welcome_msg = (
-        "👋 **Welcome to your new chat!**\n\n"
-        "Ask me anything — I can use tools, fetch external data, or answer normally."
-    )
-    st.session_state.sessions[session_id].append({
-        "role": "assistant",
-        "content": welcome_msg
-    })
-    st.session_state.meta[session_id]["welcome_shown"] = True
-
-
-# -------------------------------------------------------------------
-# Display Chat History
-# -------------------------------------------------------------------
+# Display history
 for msg in st.session_state.sessions[session_id]:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
 
-# -------------------------------------------------------------------
-# Chat Input
-# -------------------------------------------------------------------
-user_query = st.chat_input("Ask anything...")
+# --- Chat input box ---
+user_msg = st.chat_input("Ask something...")
 
-if user_query:
+if user_msg:
+    # store message
+    st.session_state.sessions[session_id].append({"role": "user", "content": user_msg})
 
-    # Save user message
-    st.session_state.sessions[session_id].append({
-        "role": "user",
-        "content": user_query
-    })
-
-    # Display user message instantly
     with st.chat_message("user"):
-        st.write(user_query)
+        st.write(user_msg)
 
-    # Assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-
+            # inject session_id for document tool
             response = graph.invoke(
-                {"messages": user_query},
-                config={"configurable": {"thread_id": session_id}}
+                {"messages": user_msg, "session_id": session_id},
+                config={"configurable": {"thread_id": session_id}},
             )
 
             messages = response["messages"]
-            last_msg = messages[-1]
+            last = messages[-1]
 
-            # -------------------------------------------------------------------
-            # 1️⃣ TOOL CALL DETECTED
-            # -------------------------------------------------------------------
-            if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-                tool_call = last_msg.tool_calls[0]
-                tool_name = tool_call.get("name", "unknown_tool")
-                tool_args = tool_call.get("args", {})
+            # TOOL CALL
+            if hasattr(last, "tool_calls") and last.tool_calls:
+                call = last.tool_calls[0]
+                st.info(f"🛠 Tool: `{call['name']}`")
+                st.code(call["args"])
 
-                st.write(f"🔧 **Tool Call Detected:** `{tool_name}`")
-                st.write(f"📦 **Arguments:** `{tool_args}`")
-                st.write("⏳ Running tool...")
-
-                # -------------------------------------------------------------------
-                # 2️⃣ TOOL OUTPUT (SUCCESS CASE)
-                # -------------------------------------------------------------------
+                # show tool outputs
                 for m in messages:
-                    if m.__class__.__name__ == "ToolMessage" and getattr(m, "status", None) != "error":
-                        st.info("🛠️ **Tool Output:**")
+                    if m.__class__.__name__ == "ToolMessage":
                         st.code(m.content)
 
-                        # Save tool output to history
-                        st.session_state.sessions[session_id].append({
-                            "role": "assistant",
-                            "content": f"🛠️ Tool Output:\n\n```\n{m.content}\n```"
-                        })
-                        break
+            # NORMAL RESPONSE
+            bot = last.content or "(no output)"
+            st.write(bot)
 
-                # -------------------------------------------------------------------
-                # 3️⃣ TOOL ERROR (FAILURE CASE)
-                # -------------------------------------------------------------------
-                for m in messages:
-                    if m.__class__.__name__ == "ToolMessage" and getattr(m, "status", None) == "error":
-                        st.error("❌ **Tool Execution Failed**")
-                        st.warning(f"**Tool:** `{m.name}`")
-                        st.code(m.content)
-
-                        st.session_state.sessions[session_id].append({
-                            "role": "assistant",
-                            "content": f"❌ Tool `{tool_name}` failed:\n```\n{m.content}\n```"
-                        })
-                        st.rerun()
-
-
-            # -------------------------------------------------------------------
-            # 4️⃣ NORMAL ASSISTANT RESPONSE
-            # -------------------------------------------------------------------
-            bot_response = last_msg.content or "(No response available)"
-            st.write(bot_response)
-
-    # Save bot message
-    st.session_state.sessions[session_id].append({
-        "role": "assistant",
-        "content": bot_response
-    })
+    st.session_state.sessions[session_id].append(
+        {"role": "assistant", "content": bot}
+    )
 
     st.rerun()
