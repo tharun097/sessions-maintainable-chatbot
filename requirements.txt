@@ -1,5 +1,4 @@
 langchain
 langchain_groq
 streamlit
-
-
+pdfplumber
