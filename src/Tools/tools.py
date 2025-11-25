@@ -3,114 +3,134 @@ import json
 import streamlit as st
 from huggingface_hub import login
 
-from langchain_community.document_loaders import WebBaseLoader, CSVLoader, TextLoader
+from langchain_community.document_loaders import (
+    WebBaseLoader, CSVLoader, TextLoader, PyPDFLoader
+)
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-
 from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langgraph.prebuilt import ToolNode
 
-# -------------------------------------------------
-# ENV SETUP
-# -------------------------------------------------
+# -------------------------------------------------------------------
+# Environment Setup
+# -------------------------------------------------------------------
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
-os.environ["TAVILY_API_KEY"] = st.secrets["TAVILY_API_KEY"]
-
 login(token=st.secrets["HUGGINGFACEHUB_API_TOKEN"])
 
-# -------------------------------------------------
-# COMMON FUNCTION: Build Retriever from Loader
-# -------------------------------------------------
-def build_retriever(loader):
-    """Loads docs → splits → embeddings → vectorDB → retriever"""
-    docs = loader.load()
+# Shared embedding model
+emb = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2",
+    model_kwargs={"device": "cpu"},
+    encode_kwargs={"normalize_embeddings": False},
+)
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    doc_splits = splitter.split_documents(docs)
+# Document retrievers are stored in-memory per chat session
+DOCUMENT_RETRIEVERS = {}  # key = session_id, value = retriever
 
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": False},
-    )
 
-    vectordb = Chroma.from_documents(doc_splits, embeddings)
+# -------------------------------------------------------------------
+# Utility: Build Retriever from text documents
+# -------------------------------------------------------------------
+def build_retriever_from_docs(docs):
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+    chunks = splitter.split_documents(docs)
+    vectordb = Chroma.from_documents(chunks, emb)
     return vectordb.as_retriever()
 
 
-# -------------------------------------------------
-# NASA TOOL
-# -------------------------------------------------
+# -------------------------------------------------------------------
+# Upload Processing
+# -------------------------------------------------------------------
+def process_uploaded_files(files, session_id):
+    """Build or update retriever for uploaded files."""
+    docs = []
+
+    for file in files:
+        ext = file.name.lower()
+
+        if ext.endswith(".pdf"):
+            loader = PyPDFLoader(file)
+        elif ext.endswith(".csv"):
+            loader = CSVLoader(file, encoding="utf8")
+        elif ext.endswith(".txt"):
+            loader = TextLoader(file, encoding="utf8")
+        else:
+            continue
+
+        docs.extend(loader.load())
+
+    # Build new retriever for this session
+    DOCUMENT_RETRIEVERS[session_id] = build_retriever_from_docs(docs)
+
+
+# -------------------------------------------------------------------
+# Document Query Tool
+# -------------------------------------------------------------------
+@tool
+def document_tool(query: str, session_id: str) -> str:
+    """
+    Query the user's uploaded documents.
+    """
+    retriever = DOCUMENT_RETRIEVERS.get(session_id)
+
+    if not retriever:
+        return "No documents uploaded yet. Please upload a file from the sidebar."
+
+    results = retriever.invoke(query)
+    return "\n\n".join([r.page_content[:700] for r in results])
+
+
+# -------------------------------------------------------------------
+# Existing Tools
+# -------------------------------------------------------------------
 @tool
 def nasa_tool(query: str) -> str:
-    """Search information about NASA"""
     loader = WebBaseLoader(
         web_path="https://www.nasa.gov/",
         requests_per_second=2,
-        bs_kwargs={},
         bs_get_text_kwargs={"separator": "\n", "strip": True},
     )
-
-    retriever = build_retriever(loader)
+    docs = loader.load()
+    retriever = build_retriever_from_docs(docs)
     results = retriever.invoke(query)
-
     return "\n\n".join([d.page_content[:500] for d in results])
 
 
-# -------------------------------------------------
-# REST API TOOL
-# -------------------------------------------------
 @tool
 def api_tool(query: str) -> str:
-    """Search knowledge base of REST APIs"""
     loader = TextLoader("assets/knowledge_base1.txt", encoding="utf8")
-
-    retriever = build_retriever(loader)
+    retriever = build_retriever_from_docs(loader.load())
     results = retriever.invoke(query)
-
     return "\n\n".join([d.page_content[:500] for d in results])
 
 
-# -------------------------------------------------
-# SATELLITE TOOL
-# -------------------------------------------------
 @tool
 def satellite_data_tool(query: str) -> str:
-    """Search satellite dataset"""
     loader = CSVLoader("assets/knowledge_base3.csv", encoding="utf8")
-
-    retriever = build_retriever(loader)
+    retriever = build_retriever_from_docs(loader.load())
     results = retriever.invoke(query)
-
     return "\n\n".join([d.page_content[:500] for d in results])
 
 
-# -------------------------------------------------
-# SENSOR TOOL
-# -------------------------------------------------
 @tool
 def sensors_data_tool(query: str) -> str:
-    """Search sensor raw dataset"""
     loader = CSVLoader("assets/sensor_raw_data.csv", encoding="utf8")
-
-    retriever = build_retriever(loader)
+    retriever = build_retriever_from_docs(loader.load())
     results = retriever.invoke(query)
-
     return "\n\n".join([d.page_content[:500] for d in results])
 
 
-# -------------------------------------------------
-# Define Tools List
-# -------------------------------------------------
+# -------------------------------------------------------------------
+# Expose all tools (doc tool included)
+# -------------------------------------------------------------------
 def get_tools():
     tavily = TavilySearchResults(max_results=3)
-    return [nasa_tool, api_tool, satellite_data_tool, sensors_data_tool, tavily]
-
-
-# -------------------------------------------------
-# Tool Node
-# -------------------------------------------------
-def create_tool_node(tools):
-    return ToolNode(tools=tools)
+    return [
+        nasa_tool,
+        api_tool,
+        satellite_data_tool,
+        sensors_data_tool,
+        document_tool,
+        tavily,
+    ]
