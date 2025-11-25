@@ -19,12 +19,18 @@ from __future__ import annotations
 
 import os
 import json
-import streamlit as st
+import tempfile
 from typing import List, Dict, Optional
 
+import streamlit as st
 from huggingface_hub import login
 
-from langchain_community.document_loaders import WebBaseLoader, CSVLoader, TextLoader, PyPDFLoader
+from langchain_community.document_loaders import (
+    WebBaseLoader,
+    CSVLoader,
+    TextLoader,
+    PyPDFLoader,
+)
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -34,15 +40,13 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
 
 # -------------------------------------------------------------------------
-# Environment & Auth
+# ENV + AUTH
 # -------------------------------------------------------------------------
-# Ensure secrets exist in Streamlit secrets. Adjust as needed for your env.
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
-# Login to HF - required for downloading sentence-transformers models
 login(token=st.secrets["HUGGINGFACEHUB_API_TOKEN"])
 
 # -------------------------------------------------------------------------
-# Shared embedding model
+# EMBEDDINGS (Shared for All Tools)
 # -------------------------------------------------------------------------
 emb = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2",
@@ -50,40 +54,66 @@ emb = HuggingFaceEmbeddings(
     encode_kwargs={"normalize_embeddings": False},
 )
 
-# In-memory per-session retrievers built from user uploads
+# In-memory per-session document retrievers
 DOCUMENT_RETRIEVERS: Dict[str, "VectorStoreRetriever"] = {}  # type: ignore[name-defined]
 
 
 # -------------------------------------------------------------------------
-# Helper: build_retriever
+# Helper: Build a Retriever
 # -------------------------------------------------------------------------
-def build_retriever(loader) -> "VectorStoreRetriever":  # type: ignore[name-defined]
-    """
-    Build a vectorstore retriever from a LangChain document loader.
-
-    Steps:
-    1. Load documents using provided loader.
-    2. Split documents into chunks.
-    3. Create embeddings with the shared HuggingFace model.
-    4. Index chunks in Chroma and return an as_retriever() object.
-
-    Args:
-        loader: A LangChain document loader instance (has .load()).
-
-    Returns:
-        A VectorStoreRetriever-like object that supports .invoke(query).
-    """
-    docs = loader.load()
+def build_retriever_from_docs(docs) -> "VectorStoreRetriever":  # type: ignore[name-defined]
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    doc_splits = splitter.split_documents(docs)
-    vectordb = Chroma.from_documents(doc_splits, emb)
+    chunks = splitter.split_documents(docs)
+    vectordb = Chroma.from_documents(chunks, emb)
     return vectordb.as_retriever()
 
 
+def build_retriever(loader) -> "VectorStoreRetriever":  # type: ignore[name-defined]
+    docs = loader.load()
+    return build_retriever_from_docs(docs)
+
+
 # -------------------------------------------------------------------------
-# Document upload handling (session-aware)
+# File Loader Helper (Fix for Streamlit UploadedFile)
 # -------------------------------------------------------------------------
-def process_uploaded_files(files: List[st.runtime.uploaded_file_manager.UploadedFile], session_id: str) -> None:
+def load_uploaded_file(file) -> List:
+    """
+    Safely load Streamlit UploadedFile using langchain loaders.
+
+    Saves UploadFile into a temporary file path so loaders accept it.
+    """
+    suffix = ""
+    if file.name.lower().endswith(".pdf"):
+        suffix = ".pdf"
+    elif file.name.lower().endswith(".csv"):
+        suffix = ".csv"
+    elif file.name.lower().endswith(".txt"):
+        suffix = ".txt"
+    else:
+        return []  # unsupported
+
+    # Create temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(file.getvalue())
+        tmp_path = tmp.name
+
+    # Use the correct loader
+    if suffix == ".pdf":
+        loader = PyPDFLoader(tmp_path)
+    elif suffix == ".csv":
+        loader = CSVLoader(tmp_path, encoding="utf8")
+    else:
+        loader = TextLoader(tmp_path, encoding="utf8")
+
+    return loader.load()
+
+
+# -------------------------------------------------------------------------
+# Document Upload Handler
+# -------------------------------------------------------------------------
+def process_uploaded_files(
+    files: List[st.runtime.uploaded_file_manager.UploadedFile], session_id: str
+) -> None:
     """
     Process uploaded files and build/update a session-scoped retriever.
 
@@ -91,38 +121,22 @@ def process_uploaded_files(files: List[st.runtime.uploaded_file_manager.Uploaded
      - PDF (.pdf)
      - CSV (.csv)
      - Plain text (.txt)
-
-    The function loads each file via a suitable LangChain loader, combines
-    all documents, builds a Chroma vector store, and stores the retriever in
-    the DOCUMENT_RETRIEVERS dict under the session_id.
-
-    Args:
-        files: List of Streamlit UploadedFile objects from file_uploader.
-        session_id: The chat session identifier (string).
     """
-    docs = []
-    for f in files:
-        fname = f.name.lower()
-        if fname.endswith(".pdf"):
-            loader = PyPDFLoader(f)
-        elif fname.endswith(".csv"):
-            loader = CSVLoader(f, encoding="utf8")
-        elif fname.endswith(".txt"):
-            loader = TextLoader(f, encoding="utf8")
-        else:
-            # skip unsupported file type; you can extend to docx, json, etc.
-            continue
-        docs.extend(loader.load())
+    all_docs = []
 
-    if docs:
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-        chunks = splitter.split_documents(docs)
-        vectordb = Chroma.from_documents(chunks, emb)
-        DOCUMENT_RETRIEVERS[session_id] = vectordb.as_retriever()
+    for file in files:
+        loaded_docs = load_uploaded_file(file)
+        all_docs.extend(loaded_docs)
+
+    # If nothing was loaded (unsupported types or empty list) → skip
+    if not all_docs:
+        return
+
+    DOCUMENT_RETRIEVERS[session_id] = build_retriever_from_docs(all_docs)
 
 
 # -------------------------------------------------------------------------
-# Document tool (session-aware)
+# Document Tool
 # -------------------------------------------------------------------------
 @tool
 def document_tool(query: str, session_id: str) -> str:
@@ -142,15 +156,16 @@ def document_tool(query: str, session_id: str) -> str:
     """
     retriever = DOCUMENT_RETRIEVERS.get(session_id)
     if not retriever:
-        return "No documents uploaded yet for this session. Please upload files via the sidebar."
+        return (
+            "No documents uploaded yet for this session. Please upload files via the sidebar."
+        )
 
     results = retriever.invoke(query)
-    # join the top results into a human-friendly string, truncate each chunk
     return "\n\n".join([r.page_content[:800] for r in results])
 
 
 # -------------------------------------------------------------------------
-# Domain tools
+# Domain Tools (NASA, REST API, Satellite, Sensor)
 # -------------------------------------------------------------------------
 @tool
 def nasa_tool(query: str) -> str:
@@ -225,27 +240,19 @@ def sensors_data_tool(query: str) -> str:
 
 
 # -------------------------------------------------------------------------
-# Tools exposure helpers
+# Tools Exposure
 # -------------------------------------------------------------------------
 def get_tools() -> List:
-    """
-    Return the list of tool callables / BaseTool objects to expose to LangGraph.
-
-    The order does not matter; document_tool is included so the LLM can query
-    user-uploaded documents. TavilySearchResults is included as a BaseTool.
-    """
     tavily = TavilySearchResults(max_results=3)
-    return [nasa_tool, api_tool, satellite_data_tool, sensors_data_tool, document_tool, tavily]
+    return [
+        nasa_tool,
+        api_tool,
+        satellite_data_tool,
+        sensors_data_tool,
+        document_tool,  # upload-aware
+        tavily,
+    ]
 
 
 def create_tool_node(tools: List) -> ToolNode:
-    """
-    Create and return a LangGraph ToolNode configured with the provided tools.
-
-    Args:
-        tools: A list of tool callables and/or BaseTool objects (as returned by get_tools()).
-
-    Returns:
-        ToolNode instance suitable for adding to the graph.
-    """
     return ToolNode(tools=tools)
