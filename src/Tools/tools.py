@@ -1,146 +1,116 @@
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.document_loaders import CSVLoader
-from langchain_community.document_loaders import TextLoader
-from bs4 import BeautifulSoup
+from langchain_community.document_loaders import WebBaseLoader, CSVLoader, TextLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain_core.tools import tool
-# from langchain.tools import create_retriever_tool
-# from langchain.tools.retriever import create_retriever_tool
-import streamlit as st
 from langchain_core.tools import create_retriever_tool
-# from langgraph.prebuilt import create_retriever_tool
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
-import os 
+from langchain_community.tools.tavily_search import TavilySearchResults
 from huggingface_hub import login
-# from dotenv import load_dotenv 
-# load_dotenv()
+import os
+import streamlit as st
+
+
+# ------------------------------------------
+# AUTH
+# ------------------------------------------
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
-os.environ["TAVILY_API_KEY"]=st.secrets["TAVILY_API_KEY"]
+os.environ["TAVILY_API_KEY"] = st.secrets["TAVILY_API_KEY"]
 login(token=st.secrets["HUGGINGFACEHUB_API_TOKEN"])
-# ---------------- NASA TOOL ----------------
+
+
+# ------------------------------------------
+# HELPER — build retriever tool
+# ------------------------------------------
+def build_retriever_tool(docs, name, desc):
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": False},
+    )
+
+    vectordb = Chroma.from_documents(docs, embeddings)
+    retriever = vectordb.as_retriever()
+
+    return create_retriever_tool(
+        retriever=retriever,
+        name=name,
+        description=desc,
+    )
+
+
+# ------------------------------------------
+# TOOLS (no execution at import time)
+# ------------------------------------------
 def nasa_tool():
-    web_content_loader = WebBaseLoader(
+    loader = WebBaseLoader(
         web_path="https://www.nasa.gov/",
         requests_per_second=2,
         bs_kwargs={},
-        bs_get_text_kwargs={"separator": "\n", "strip": True}
+        bs_get_text_kwargs={"separator": "\n", "strip": True},
     )
-    web_data = web_content_loader.load()
+    docs = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=100
+    ).split_documents(loader.load())
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    docs = splitter.split_documents(web_data)
-
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': False}
-    )
-
-    vectordb = Chroma.from_documents(docs, embeddings)
-    retriever = vectordb.as_retriever()
-
-    return create_retriever_tool(
-        retriever=retriever,
-        name="nasa_data_knowledge_base",
-        description="Search and run information about NASA"
+    return build_retriever_tool(
+        docs,
+        "nasa_data_knowledge_base",
+        "Search and run information about NASA",
     )
 
 
-# ---------------- API TOOL ----------------
 def api_tool():
-    loader = TextLoader(
-        file_path="assets/knowledge_base1.txt",
-        encoding="utf8"
-    )
-    data = loader.load()
+    loader = TextLoader("assets/knowledge_base1.txt", encoding="utf8")
+    docs = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=100
+    ).split_documents(loader.load())
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    docs = splitter.split_documents(data)
-
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': False}
-    )
-
-    vectordb = Chroma.from_documents(docs, embeddings)
-    retriever = vectordb.as_retriever()
-
-    return create_retriever_tool(
-        retriever=retriever,
-        name="rest_api_knowledge_base",
-        description="Search and run information about REST APIs"
+    return build_retriever_tool(
+        docs,
+        "rest_api_knowledge_base",
+        "Search and run information about REST APIs",
     )
 
 
-# ---------------- SATELLITE TOOL ----------------
 def satellite_data_tool():
-    loader = CSVLoader(
-        file_path="assets/knowledge_base3.csv",
-        encoding="utf8"
-    )
-    data = loader.load()
+    loader = CSVLoader("assets/knowledge_base3.csv", encoding="utf8")
+    docs = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=100
+    ).split_documents(loader.load())
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    docs = splitter.split_documents(data)
-
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': False}
-    )
-
-    vectordb = Chroma.from_documents(docs, embeddings)
-    retriever = vectordb.as_retriever()
-
-    return create_retriever_tool(
-        retriever=retriever,
-        name="satellite_knowledge_base",
-        description="Search information about satellites"
+    return build_retriever_tool(
+        docs,
+        "satellite_knowledge_base",
+        "Search information about satellites",
     )
 
 
-# ---------------- SENSOR TOOL ----------------
 def sensors_data_tool():
-    loader = CSVLoader(
-        file_path="assets/sensor_raw_data.csv",
-        encoding="utf8"
-    )
-    data = loader.load()
+    loader = CSVLoader("assets/sensor_raw_data.csv", encoding="utf8")
+    docs = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=100
+    ).split_documents(loader.load())
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    docs = splitter.split_documents(data)
-
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': False}
+    return build_retriever_tool(
+        docs,
+        "sensor_data_knowledge_base",
+        "Search and run information about sensor raw data",
     )
 
-    vectordb = Chroma.from_documents(docs, embeddings)
-    retriever = vectordb.as_retriever()
 
-    return create_retriever_tool(
-        retriever=retriever,
-        name="sensor_data_knowledge_base",
-        description="Search and run information about sensor raw data"
-    )
-
-tool_1 = nasa_tool()
-tool_2 = api_tool()
-tool_3 = satellite_data_tool()
-tool_4 = sensors_data_tool()
+# ------------------------------------------
+# THIS IS THE REAL FIX — Create tools only HERE
+# ------------------------------------------
 def get_tools():
-    """Returns a list of available tools."""
-    # tavily_tool = TavilySearchResults(max_results=3)
-    tools = [tool_1,tool_2,tool_3,tool_4]
+    tools = [
+        nasa_tool(),
+        api_tool(),
+        satellite_data_tool(),
+        sensors_data_tool(),
+        TavilySearchResults(max_results=3),  # already BaseTool
+    ]
     return tools
 
+
 def create_tool_node(tools):
-    """Creates a ToolNode for the given tool."""
     return ToolNode(tools=tools)
-    
