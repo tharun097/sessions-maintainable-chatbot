@@ -1,27 +1,29 @@
-from langchain_community.document_loaders import WebBaseLoader, CSVLoader, TextLoader
+import os
+import json
+import streamlit as st
+from huggingface_hub import login
+
+from langchain_community.document_loaders import WebBaseLoader, TextLoader, CSVLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain_core.tools import create_retriever_tool
-from langgraph.prebuilt import ToolNode
+from langchain_core.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
-from huggingface_hub import login
-import os
-import streamlit as st
+from langgraph.prebuilt import ToolNode
 
 
-# ------------------------------------------
-# AUTH
-# ------------------------------------------
+# ------------- AUTH -------------
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 os.environ["TAVILY_API_KEY"] = st.secrets["TAVILY_API_KEY"]
 login(token=st.secrets["HUGGINGFACEHUB_API_TOKEN"])
 
 
-# ------------------------------------------
-# HELPER — build retriever tool
-# ------------------------------------------
-def build_retriever_tool(docs, name, desc):
+# ------------- Helper -------------
+def load_vector_retriever(loader):
+    docs = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=100
+    ).split_documents(loader.load())
+
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
         model_kwargs={"device": "cpu"},
@@ -29,87 +31,58 @@ def build_retriever_tool(docs, name, desc):
     )
 
     vectordb = Chroma.from_documents(docs, embeddings)
-    retriever = vectordb.as_retriever()
-
-    return create_retriever_tool(
-        retriever=retriever,
-        name=name,
-        description=desc,
-    )
+    return vectordb.as_retriever()
 
 
-# ------------------------------------------
-# TOOLS (no execution at import time)
-# ------------------------------------------
-def nasa_tool():
-    loader = WebBaseLoader(
-        web_path="https://www.nasa.gov/",
-        requests_per_second=2,
-        bs_kwargs={},
-        bs_get_text_kwargs={"separator": "\n", "strip": True},
-    )
-    docs = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=100
-    ).split_documents(loader.load())
-
-    return build_retriever_tool(
-        docs,
-        "nasa_data_knowledge_base",
-        "Search and run information about NASA",
-    )
+# ---------------- NASA TOOL ----------------
+@tool
+def nasa_tool(query: str) -> str:
+    """Search NASA website content."""
+    loader = WebBaseLoader("https://www.nasa.gov/")
+    retriever = load_vector_retriever(loader)
+    results = retriever.get_relevant_documents(query)
+    return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-def api_tool():
+# ---------------- API TOOL ----------------
+@tool
+def api_tool(query: str) -> str:
+    """Search REST API knowledge base."""
     loader = TextLoader("assets/knowledge_base1.txt", encoding="utf8")
-    docs = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=100
-    ).split_documents(loader.load())
-
-    return build_retriever_tool(
-        docs,
-        "rest_api_knowledge_base",
-        "Search and run information about REST APIs",
-    )
+    retriever = load_vector_retriever(loader)
+    results = retriever.get_relevant_documents(query)
+    return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-def satellite_data_tool():
+# ---------------- SATELLITE TOOL ----------------
+@tool
+def satellite_data_tool(query: str) -> str:
+    """Search satellite details dataset."""
     loader = CSVLoader("assets/knowledge_base3.csv", encoding="utf8")
-    docs = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=100
-    ).split_documents(loader.load())
-
-    return build_retriever_tool(
-        docs,
-        "satellite_knowledge_base",
-        "Search information about satellites",
-    )
+    retriever = load_vector_retriever(loader)
+    results = retriever.get_relevant_documents(query)
+    return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-def sensors_data_tool():
+# ---------------- SENSOR TOOL ----------------
+@tool
+def sensors_data_tool(query: str) -> str:
+    """Search sensor raw dataset."""
     loader = CSVLoader("assets/sensor_raw_data.csv", encoding="utf8")
-    docs = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=100
-    ).split_documents(loader.load())
-
-    return build_retriever_tool(
-        docs,
-        "sensor_data_knowledge_base",
-        "Search and run information about sensor raw data",
-    )
+    retriever = load_vector_retriever(loader)
+    results = retriever.get_relevant_documents(query)
+    return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-# ------------------------------------------
-# THIS IS THE REAL FIX — Create tools only HERE
-# ------------------------------------------
+# ---------------- GET TOOLS ----------------
 def get_tools():
-    tools = [
-        nasa_tool(),
-        api_tool(),
-        satellite_data_tool(),
-        sensors_data_tool(),
-        TavilySearchResults(max_results=3),  # already BaseTool
+    return [
+        nasa_tool,
+        api_tool,
+        satellite_data_tool,
+        sensors_data_tool,
+        TavilySearchResults(max_results=3),  # BaseTool
     ]
-    return tools
 
 
 def create_tool_node(tools):
