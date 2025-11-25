@@ -12,13 +12,13 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langgraph.prebuilt import ToolNode
 
 
-# ------------- AUTH -------------
+# AUTH
 os.environ["HUGGINGFACEHUB_API_TOKEN"] = st.secrets["HUGGINGFACEHUB_API_TOKEN"]
 os.environ["TAVILY_API_KEY"] = st.secrets["TAVILY_API_KEY"]
 login(token=st.secrets["HUGGINGFACEHUB_API_TOKEN"])
 
 
-# ------------- Helper -------------
+# Helper
 def load_vector_retriever(loader):
     docs = RecursiveCharacterTextSplitter(
         chunk_size=1000, chunk_overlap=100
@@ -34,54 +34,53 @@ def load_vector_retriever(loader):
     return vectordb.as_retriever()
 
 
-# ---------------- NASA TOOL ----------------
+# NASA TOOL
 @tool
 def nasa_tool(query: str) -> str:
     """Search NASA website content."""
     loader = WebBaseLoader("https://www.nasa.gov/")
     retriever = load_vector_retriever(loader)
-    results = retriever.get_relevant_documents(query)
+    results = retriever.invoke(query)
     return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-# ---------------- API TOOL ----------------
+# API TOOL
 @tool
 def api_tool(query: str) -> str:
     """Search REST API knowledge base."""
     loader = TextLoader("assets/knowledge_base1.txt", encoding="utf8")
     retriever = load_vector_retriever(loader)
-    results = retriever.get_relevant_documents(query)
+    results = retriever.invoke(query)
     return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-# ---------------- SATELLITE TOOL ----------------
+# SATELLITE TOOL
 @tool
 def satellite_data_tool(query: str) -> str:
-    """Search satellite details dataset."""
+    """Search satellite dataset."""
     loader = CSVLoader("assets/knowledge_base3.csv", encoding="utf8")
     retriever = load_vector_retriever(loader)
-    results = retriever.get_relevant_documents(query)
+    results = retriever.invoke(query)
     return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-# ---------------- SENSOR TOOL ----------------
+# SENSOR TOOL
 @tool
 def sensors_data_tool(query: str) -> str:
     """Search sensor raw dataset."""
     loader = CSVLoader("assets/sensor_raw_data.csv", encoding="utf8")
     retriever = load_vector_retriever(loader)
-    results = retriever.get_relevant_documents(query)
+    results = retriever.invoke(query)
     return json.dumps([d.page_content[:400] for d in results], indent=2)
 
 
-# ---------------- GET TOOLS ----------------
 def get_tools():
     return [
         nasa_tool,
         api_tool,
         satellite_data_tool,
         sensors_data_tool,
-        TavilySearchResults(max_results=3),  # BaseTool
+        TavilySearchResults(max_results=3),
     ]
 
 
