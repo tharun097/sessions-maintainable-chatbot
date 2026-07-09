@@ -22,7 +22,7 @@ st.set_page_config(page_title="Q&A Chatbot", page_icon="💬")
 # -------------------------------------------------------------------
 @st.cache_resource
 def load_graph():
-    model = GroqLLM(llm="llama-3.1-8b-instant", api_key=api_key).load_llm()
+    model = GroqLLM(llm="meta-llama/llama-4-scout-17b-16e-instruct", api_key=api_key).load_llm()
     return Graphbuilder(model).get_chatbot_graph()
 
 graph = load_graph()
